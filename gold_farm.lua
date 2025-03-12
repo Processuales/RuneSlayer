@@ -1,10 +1,25 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/0xCiel/RuneSlayerScript/refs/heads/main/main.lua"))()
+
+getgenv().DontSell = {
+    "Gold Ore", 
+}
+getgenv().OnlyMine = {
+    "Gold",
+    "Mithril",
+    "Platinum",
+
+}
+getgenv().Slot = "Slot_2"
+getgenv().Autofarm = true
+
+print("Script loaded successfully!")
 task.wait(5)
 queue_on_teleport(
-    'loadstring(game:HttpGet("https://raw.githubusercontent.com/th4rau/runeslayers/refs/heads/main/autofarm.lua",false))()'
+    'loadstring(game:HttpGet("https://raw.githubusercontent.com/Processuales/RuneSlayer/refs/heads/main/gold_farm.lua",false))()'
 )
 
 local scc, err = pcall(function()
-    local Teleport, Mine = loadstring(game:HttpGet("https://raw.githubusercontent.com/th4rau/runeslayers/refs/heads/main/functions.lua"))()
+    local Teleport, Mine = loadstring(game:HttpGet("https://raw.githubusercontent.com/Processuales/RuneSlayer/refs/heads/main/gold_farm.lua"))()
 
     -- Remove all lava parts
     for i, v in game:GetDescendants() do
