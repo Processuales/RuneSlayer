@@ -7,7 +7,7 @@
 --]]
 
 -- Config
-local ENABLED = false
+local ENABLED = true
 local WAIT_TIME = 250
 local MIN_PLAYERS = 12
 
