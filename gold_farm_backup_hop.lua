@@ -12,7 +12,7 @@ local WAIT_TIME = 250
 local MIN_PLAYERS = 12
 
 -- Replace the URL with the location of your script code
-local SCRIPT_URL = "https://pastebin.com/raw/yourScriptCode"
+local SCRIPT_URL = "https://raw.githubusercontent.com/Processuales/RuneSlayer/refs/heads/main/gold_farm_backup_hop.lua"
 
 -- Server hop function without checking recent servers
 local function serverhop()
