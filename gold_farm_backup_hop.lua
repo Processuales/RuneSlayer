@@ -15,118 +15,103 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/Processuales/RuneSlayer/re
 local RECENT_FOLDER = "ServerHopData"
 local TELEPORT_LOCK_FILE = RECENT_FOLDER .. "/TeleportLock.txt"
 
--- Ensure the folder exists
+-- Ensure folder exists
 if not isfolder(RECENT_FOLDER) then
     makefolder(RECENT_FOLDER)
 end
 
--- At the start of this backup script, reset the teleport lock to false.
+-- Reset teleport lock at start
 writefile(TELEPORT_LOCK_FILE, "false")
 
--- Teleport lock functions (backup only reads the lock; it does not set it to true)
 local function getTeleportLock()
     if isfile(TELEPORT_LOCK_FILE) then
-        local data = readfile(TELEPORT_LOCK_FILE)
-        return data == "true"
-    else
-        return false
+        return readfile(TELEPORT_LOCK_FILE) == "true"
     end
+    return false
 end
 
 local function setTeleportLock(status)
     writefile(TELEPORT_LOCK_FILE, status and "true" or "false")
 end
 
--- In case of kick, teleport back to the same place.
+-- Teleport back on kick
 game.Players.PlayerRemoving:Connect(function(plr)
     if plr == game.Players.LocalPlayer then
         game:GetService("TeleportService"):Teleport(game.PlaceId)
     end
 end)
 
--- Server hop function with teleport lock and error handling.
 local function serverhop()
     local HttpService = game:GetService("HttpService")
     local TeleportService = game:GetService("TeleportService")
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
+    local LocalPlayer = game:GetService("Players").LocalPlayer
 
     local ServersUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-    local NextPageCursor = nil
-    local chosenServer = nil
-
-    local function ListServers(cursor)
-        local url = ServersUrl .. (cursor and ("&cursor=" .. cursor) or "")
-        local Raw = game:HttpGet(url)
-        return HttpService:JSONDecode(Raw)
-    end
+    local nextCursor = nil
 
     repeat
-        local success, Servers = pcall(function() return ListServers(NextPageCursor) end)
-        if not success or not Servers or not Servers.data then
+        local ok, data = pcall(function()
+            local url = ServersUrl .. (nextCursor and "&cursor=" .. nextCursor or "")
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        if not ok or not data or not data.data then
             warn("[DEBUG] Failed to retrieve servers. Retrying in 10 seconds...")
             wait(10)
         else
-            NextPageCursor = Servers.nextPageCursor
-
-            local eligibleServers = {}
-            for _, server in ipairs(Servers.data) do
+            nextCursor = data.nextPageCursor
+            local candidates = {}
+            for _, server in ipairs(data.data) do
                 if server.id ~= game.JobId and server.playing >= MIN_PLAYERS then
-                    table.insert(eligibleServers, server)
+                    table.insert(candidates, server)
                 end
             end
+            if #candidates > 0 then
+                table.sort(candidates, function(a, b) return a.playing < b.playing end)
+                local chosen = candidates[1]
+                print("[DEBUG] Hopping to server: " .. chosen.id .. " (" .. chosen.playing .. " players)")
 
-            if #eligibleServers > 0 then
-                table.sort(eligibleServers, function(a, b)
-                    return a.playing < b.playing
-                end)
-                chosenServer = eligibleServers[1]
-                print("[DEBUG] Hopping to server: " .. chosenServer.id .. " (" .. chosenServer.playing .. " players)")
-                
-                -- Queue the script on teleport if possible
                 if queue_on_teleport then
-                    local successQueue, err = pcall(function()
+                    pcall(function()
                         queue_on_teleport(game:HttpGet(SCRIPT_URL))
                     end)
-                    if not successQueue then
-                        warn("[DEBUG] Failed to queue script on teleport: " .. tostring(err))
-                    else
-                        print("[DEBUG] Script queued on teleport.")
-                    end
                 end
 
-                -- Wait for teleport lock to be free and then lock it
+                -- Wait for lock or timeout after 10 seconds
+                local startTime = tick()
                 while getTeleportLock() do
+                    if tick() - startTime > 10 then
+                        warn("[DEBUG] Teleport lock stale, forcing reset")
+                        setTeleportLock(false)
+                        break
+                    end
                     print("[DEBUG] Teleport lock active, waiting...")
                     wait(1)
                 end
                 setTeleportLock(true)
 
-                local tpSuccess, tpError = pcall(function()
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosenServer.id, LocalPlayer)
+                local success, err = pcall(function()
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, LocalPlayer)
                 end)
-                if not tpSuccess then
-                    warn("[DEBUG] Teleport failed: " .. tostring(tpError) .. ". Resetting teleport lock and retrying in 10 seconds...")
+                if not success then
+                    warn("[DEBUG] Teleport failed: " .. tostring(err))
                     setTeleportLock(false)
-                    wait(10)
+                    warn("[DEBUG] Retrying forced teleport in 5 seconds")
+                    wait(5)
+                    setTeleportLock(true)
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen.id, LocalPlayer)
                 end
                 return
             end
-
-            if not NextPageCursor then
+            if not nextCursor then
                 warn("[DEBUG] No eligible server found. Retrying in 10 seconds...")
                 wait(10)
             end
         end
-    until chosenServer ~= nil
-
-    warn("[DEBUG] No server available. Retrying in 10 seconds...")
-    wait(10)
-    serverhop()
+    until false
 end
 
 if ENABLED then
-    print("[DEBUG] Backup script enabled. Waiting " .. WAIT_TIME .. " seconds before forcing a server hop.")
+    print("[DEBUG] Backup script enabled. Waiting " .. WAIT_TIME .. " seconds before server hop.")
     wait(WAIT_TIME)
     serverhop()
 end
