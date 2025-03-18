@@ -11,17 +11,40 @@ local ENABLED = true
 local WAIT_TIME = 250
 local MIN_PLAYERS = 12
 
--- Replace the URL with the location of your script code
 local SCRIPT_URL = "https://raw.githubusercontent.com/Processuales/RuneSlayer/refs/heads/main/gold_farm_backup_hop.lua"
+local RECENT_FOLDER = "ServerHopData"
+local TELEPORT_LOCK_FILE = RECENT_FOLDER .. "/TeleportLock.txt"
 
--- In case of kick
+-- Ensure the folder exists
+if not isfolder(RECENT_FOLDER) then
+    makefolder(RECENT_FOLDER)
+end
+
+-- At the start of this backup script, reset the teleport lock to false.
+writefile(TELEPORT_LOCK_FILE, "false")
+
+-- Teleport lock functions (backup only reads the lock; it does not set it to true)
+local function getTeleportLock()
+    if isfile(TELEPORT_LOCK_FILE) then
+        local data = readfile(TELEPORT_LOCK_FILE)
+        return data == "true"
+    else
+        return false
+    end
+end
+
+local function setTeleportLock(status)
+    writefile(TELEPORT_LOCK_FILE, status and "true" or "false")
+end
+
+-- In case of kick, teleport back to the same place.
 game.Players.PlayerRemoving:Connect(function(plr)
     if plr == game.Players.LocalPlayer then
         game:GetService("TeleportService"):Teleport(game.PlaceId)
     end
 end)
 
--- Server hop function without checking recent servers
+-- Server hop function with teleport lock and error handling.
 local function serverhop()
     local HttpService = game:GetService("HttpService")
     local TeleportService = game:GetService("TeleportService")
@@ -63,7 +86,6 @@ local function serverhop()
                 -- Queue the script on teleport if possible
                 if queue_on_teleport then
                     local successQueue, err = pcall(function()
-                        -- Fetch the script from an online source
                         queue_on_teleport(game:HttpGet(SCRIPT_URL))
                     end)
                     if not successQueue then
@@ -73,11 +95,19 @@ local function serverhop()
                     end
                 end
 
+                -- Wait for teleport lock to be free and then lock it
+                while getTeleportLock() do
+                    print("[DEBUG] Teleport lock active, waiting...")
+                    wait(1)
+                end
+                setTeleportLock(true)
+
                 local tpSuccess, tpError = pcall(function()
                     TeleportService:TeleportToPlaceInstance(game.PlaceId, chosenServer.id, LocalPlayer)
                 end)
                 if not tpSuccess then
-                    warn("[DEBUG] Teleport failed: " .. tostring(tpError) .. ". Retrying in 10 seconds...")
+                    warn("[DEBUG] Teleport failed: " .. tostring(tpError) .. ". Resetting teleport lock and retrying in 10 seconds...")
+                    setTeleportLock(false)
                     wait(10)
                 end
                 return
@@ -96,7 +126,7 @@ local function serverhop()
 end
 
 if ENABLED then
-    print("[DEBUG] Backups script enabled. Waiting " .. WAIT_TIME .. " seconds before forcing a server hop.")
+    print("[DEBUG] Backup script enabled. Waiting " .. WAIT_TIME .. " seconds before forcing a server hop.")
     wait(WAIT_TIME)
     serverhop()
 end
