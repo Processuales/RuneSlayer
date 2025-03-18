@@ -14,6 +14,13 @@ local MIN_PLAYERS = 12
 -- Replace the URL with the location of your script code
 local SCRIPT_URL = "https://raw.githubusercontent.com/Processuales/RuneSlayer/refs/heads/main/gold_farm_backup_hop.lua"
 
+-- In case of kick
+game.Players.PlayerRemoving:Connect(function(plr)
+    if plr == game.Players.LocalPlayer then
+        game:GetService("TeleportService"):Teleport(game.PlaceId)
+    end
+end)
+
 -- Server hop function without checking recent servers
 local function serverhop()
     local HttpService = game:GetService("HttpService")
